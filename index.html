@@ -10,6 +10,12 @@
   html, body { height: 100%; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .card-in { animation: cardin .25s ease-out; }
   @keyframes cardin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .seek { -webkit-appearance: none; appearance: none; background: transparent; height: 28px; margin: 0; cursor: pointer; touch-action: none; }
+  .seek:focus { outline: none; }
+  .seek::-webkit-slider-runnable-track { background: transparent; height: 28px; }
+  .seek::-moz-range-track { background: transparent; height: 28px; }
+  .seek::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: 5px; border-radius: 9999px; background: #10b981; border: 3px solid #0f172a; box-shadow: 0 0 0 1px #10b981; }
+  .seek::-moz-range-thumb { width: 12px; height: 12px; border-radius: 9999px; background: #10b981; border: 3px solid #0f172a; box-shadow: 0 0 0 1px #10b981; }
 </style>
 </head>
 <body class="bg-slate-900 text-slate-100 select-none">
@@ -122,18 +128,29 @@ function showStudy(name) {
       <div class="flex-1 min-w-0"><div class="truncate font-semibold">${esc(name.replace(/_/g, ' '))}</div>
         <div id="pos" class="text-xs text-slate-400"></div></div>
     </header>
-    <div class="mx-4 h-1 bg-slate-700 rounded-full overflow-hidden"><div id="bar" class="h-full bg-emerald-500"></div></div>
+    <div class="mx-4 relative h-7 flex items-center">
+      <div class="absolute inset-x-0 h-1.5 bg-slate-700 rounded-full overflow-hidden"><div id="bar" class="h-full bg-emerald-500"></div></div>
+      <input id="seek" type="range" min="1" max="${total}" step="1" class="seek absolute inset-x-0 w-full" aria-label="Jump to sentence">
+    </div>
     <main id="stage" class="flex-1 px-4 py-5 space-y-4 overflow-hidden touch-pan-y"></main>
     <footer class="flex justify-between px-6 pb-6 text-slate-400">
       <button id="prev" class="p-3 text-2xl"><i class="bi bi-chevron-left"></i></button>
       <button id="next" class="p-3 text-2xl"><i class="bi bi-chevron-right"></i></button>
     </footer>`;
   const stage = document.getElementById('stage');
+  const seek = document.getElementById('seek');
+  const showPos = k => {
+    document.getElementById('pos').textContent = `Sentence ${k + 1} of ${total}`;
+    document.getElementById('bar').style.width = ((k + 1) / total * 100) + '%';
+  };
+  // While dragging only preview the position; jump to the card on release.
+  seek.oninput = () => showPos(+seek.value - 1);
+  seek.onchange = () => { i = +seek.value - 1; revealed = false; render(); seek.blur(); };
 
   function render() {
     progress[name] = i; save();
-    document.getElementById('pos').textContent = `Sentence ${i + 1} of ${total}`;
-    document.getElementById('bar').style.width = ((i + 1) / total * 100) + '%';
+    showPos(i);
+    seek.value = i + 1;
     stage.innerHTML = `
       <div id="en" class="card-in bg-sky-700 rounded-3xl p-6 text-xl leading-snug shadow-lg min-h-[7rem] flex items-center">${esc(en[i] || '—')}</div>
       ${revealed ? `<div id="de" class="card-in bg-emerald-700 rounded-3xl p-6 text-xl leading-snug shadow-lg min-h-[7rem] flex items-center">${esc(de[i] || '—')}</div>
