@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  <rect x="96" y="92" width="300" height="200" rx="40" fill="#0369a1" transform="rotate(-8 246 192)"/>
+  <rect x="116" y="220" width="300" height="200" rx="40" fill="#047857"/>
+  <text x="266" y="352" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="120" fill="#fff">DE</text>
+</svg>
