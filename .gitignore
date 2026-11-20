@@ -1,0 +1,7 @@
+# Subtitle/script data is copyrighted — never publish
+*.srt
+*.map.js
+node_modules/
+package.json
+package-lock.json
+.github/copilot/

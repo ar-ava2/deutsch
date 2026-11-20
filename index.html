@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deutsch Cards</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  html, body { height: 100%; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  .card-in { animation: cardin .25s ease-out; }
+  @keyframes cardin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body class="bg-slate-900 text-slate-100 select-none">
+<div id="app" class="h-full max-w-md mx-auto flex flex-col"></div>
+
+<script>
+// Add new map files here (static hosting cannot list directories).
+const MAP_FILES = [
+  'covert_affairs_s01e01.map.js',
+  'covert_affairs_s01e02.map.js',
+  'covert_affairs_s01e03.map.js',
+  'friends_s01e01.map.js',
+  'friends_s01e02.map.js',
+  'friends_s01e03.map.js',
+];
+const KEY = 'deutsch-progress-v1';
+const MAPS_KEY = 'deutsch-maps-v1'; // maps picked via the file input, kept only in this browser
+const app = document.getElementById('app');
+const maps = {};            // name -> {en, de}
+let progress = JSON.parse(localStorage.getItem(KEY) || '{}');
+let onSpace = null;
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && onSpace) { e.preventDefault(); onSpace(); }
+});
+const save = () => localStorage.setItem(KEY, JSON.stringify(progress));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const trimDash = t => (t || '').replace(/^[\s\-–—]+/, '').trim();
+
+let stored = JSON.parse(localStorage.getItem(MAPS_KEY) || '{}');
+
+function addLang(obj) {
+  for (const [k, v] of Object.entries(obj || {})) {
+    const pairs = v.en.map((e, j) => [trimDash(e), trimDash(v.de[j])])
+      .filter(([e, d]) => e && d && !/^(yes|no)\W*$/i.test(e));
+    maps[k] = { en: pairs.map(p => p[0]), de: pairs.map(p => p[1]) };
+  }
+}
+
+// Script tags (not fetch) so it also works from file://. Each file does `var lang = {...}`,
+// so load sequentially and merge after each one.
+const loadScript = src => new Promise(res => {
+  const s = document.createElement('script');
+  s.src = src;
+  s.onload = () => { const l = window.lang; window.lang = undefined; s.remove(); res(l); };
+  s.onerror = () => { console.warn('Failed to load', src); s.remove(); res(null); };
+  document.head.appendChild(s);
+});
+
+async function loadMaps() {
+  addLang(stored);
+  for (const f of MAP_FILES) addLang(await loadScript(f));
+}
+
+async function importFiles(files) {
+  for (const file of files) {
+    const url = URL.createObjectURL(new Blob([await file.text()], { type: 'text/javascript' }));
+    const l = await loadScript(url);
+    URL.revokeObjectURL(url);
+    if (!l) { alert('Could not read ' + file.name); continue; }
+    Object.assign(stored, l);
+    addLang(l);
+  }
+  try { localStorage.setItem(MAPS_KEY, JSON.stringify(stored)); }
+  catch { alert('Browser storage full; maps are loaded for this session only.'); }
+  showList();
+}
+
+function showList() {
+  onSpace = null;
+  const names = Object.keys(maps).sort();
+  app.innerHTML = `
+    <header class="px-5 pt-6 pb-3"><h1 class="text-2xl font-bold">Deutsch Cards</h1>
+      <p class="text-slate-400 text-sm">Pick an episode</p></header>
+    <main class="flex-1 overflow-y-auto px-4 pb-6 space-y-3">
+      ${names.map(n => {
+        const total = maps[n].en.length, pos = Math.min(progress[n] || 0, total);
+        const pct = total ? Math.round(pos / total * 100) : 0;
+        return `<button data-name="${esc(n)}" class="w-full text-left bg-slate-800 active:bg-slate-700 rounded-2xl p-4 shadow">
+          <div class="flex justify-between items-baseline"><span class="font-semibold">${esc(n.replace(/_/g, ' '))}</span>
+            <span class="text-sm text-slate-400">${pos} / ${total}</span></div>
+          <div class="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden"><div class="h-full bg-emerald-500" style="width:${pct}%"></div></div>
+          <div class="text-xs text-slate-400 mt-1">${pct}%</div></button>`;
+      }).join('') || '<p class="p-4 text-slate-400">No maps loaded. Add your own .map.js files below.</p>'}
+      <label class="block w-full text-center bg-slate-700 active:bg-slate-600 rounded-2xl p-3 cursor-pointer">
+        <i class="bi bi-folder-plus"></i> Load .map.js files
+        <input id="pick" type="file" accept=".js" multiple class="hidden"></label>
+      ${Object.keys(stored).length ? `<button id="clear" class="w-full text-center text-sm text-slate-400 p-2">Remove loaded files</button>` : ''}
+    </main>`;
+  app.querySelectorAll('button[data-name]').forEach(b => b.onclick = () => { location.hash = b.dataset.name; });
+  document.getElementById('pick').onchange = e => importFiles([...e.target.files]);
+  const clear = document.getElementById('clear');
+  if (clear) clear.onclick = () => {
+    if (!confirm('Remove all loaded files from this browser?')) return;
+    for (const k of Object.keys(stored)) delete maps[k];
+    stored = {}; localStorage.removeItem(MAPS_KEY);
+    loadMaps().then(showList);
+  };
+}
+
+function showStudy(name) {
+  const { en, de } = maps[name];
+  const total = en.length;
+  let i = Math.min(progress[name] || 0, total - 1);
+  let revealed = false;
+
+  app.innerHTML = `
+    <header class="flex items-center gap-3 px-3 pt-4 pb-2">
+      <button id="back" class="p-2 text-2xl" aria-label="Back"><i class="bi bi-arrow-left"></i></button>
+      <div class="flex-1 min-w-0"><div class="truncate font-semibold">${esc(name.replace(/_/g, ' '))}</div>
+        <div id="pos" class="text-xs text-slate-400"></div></div>
+    </header>
+    <div class="mx-4 h-1 bg-slate-700 rounded-full overflow-hidden"><div id="bar" class="h-full bg-emerald-500"></div></div>
+    <main id="stage" class="flex-1 px-4 py-5 space-y-4 overflow-hidden touch-pan-y"></main>
+    <footer class="flex justify-between px-6 pb-6 text-slate-400">
+      <button id="prev" class="p-3 text-2xl"><i class="bi bi-chevron-left"></i></button>
+      <button id="next" class="p-3 text-2xl"><i class="bi bi-chevron-right"></i></button>
+    </footer>`;
+  const stage = document.getElementById('stage');
+
+  function render() {
+    progress[name] = i; save();
+    document.getElementById('pos').textContent = `Sentence ${i + 1} of ${total}`;
+    document.getElementById('bar').style.width = ((i + 1) / total * 100) + '%';
+    stage.innerHTML = `
+      <div id="en" class="card-in bg-sky-700 rounded-3xl p-6 text-xl leading-snug shadow-lg min-h-[7rem] flex items-center">${esc(en[i] || '—')}</div>
+      ${revealed ? `<div id="de" class="card-in bg-emerald-700 rounded-3xl p-6 text-xl leading-snug shadow-lg min-h-[7rem] flex items-center">${esc(de[i] || '—')}</div>
+        <p class="text-center text-xs text-slate-400">Tap or swipe the German card for next</p>`
+        : `<p class="text-center text-sm text-slate-400">Tap the card to reveal German</p>`}`;
+  }
+  function go(d) {
+    const n = i + d;
+    if (n < 0 || n >= total) { if (n >= total) { progress[name] = total; save(); } return; }
+    i = n; revealed = false; render();
+  }
+  // Progress counts completed sentences: reaching the end marks all done.
+  const advance = () => { if (i === total - 1) { progress[name] = total; save(); location.hash = ''; } else go(1); };
+  stage.onclick = e => {
+    if (!revealed) { revealed = true; render(); }
+    else if (e.target.closest('#de')) advance();
+  };
+  onSpace = () => { if (!revealed) { revealed = true; render(); } else advance(); };
+  let y0 = null, x0 = null;
+  stage.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    if (y0 === null) return;
+    const dy = e.changedTouches[0].clientY - y0, dx = e.changedTouches[0].clientX - x0;
+    y0 = null;
+    if (Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)) {
+      if (!revealed && dy < 0) { revealed = true; render(); } else go(dy < 0 ? 1 : -1);
+    } else if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+  });
+  document.getElementById('back').onclick = () => { location.hash = ''; };
+  document.getElementById('prev').onclick = () => go(-1);
+  document.getElementById('next').onclick = () => go(1);
+  render();
+}
+
+function route() {
+  const name = decodeURIComponent(location.hash.slice(1));
+  if (maps[name]) showStudy(name); else showList();
+}
+window.addEventListener('hashchange', route);
+loadMaps().then(route);
+</script>
+</body>
+</html>
