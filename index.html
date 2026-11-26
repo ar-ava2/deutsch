@@ -41,7 +41,7 @@ const MAP_FILES = [
   'friends_s01e03.map.js',
 ];
 const KEY = 'deutsch-progress-v1';
-const MAPS_KEY = 'deutsch-maps-v1'; // maps picked via the file input, kept only in this browser
+const REPO_CONTENTS_URL = 'https://api.github.com/repos/ar-ava2/deutsch/contents';
 const app = document.getElementById('app');
 const maps = {};            // name -> {en, de}
 let progress = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -53,8 +53,6 @@ const save = () => localStorage.setItem(KEY, JSON.stringify(progress));
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 const trimDash = t => (t || '').replace(/^[\s\-–—]+/, '').trim();
-
-let stored = JSON.parse(localStorage.getItem(MAPS_KEY) || '{}');
 
 function addLang(obj) {
   for (const [k, v] of Object.entries(obj || {})) {
@@ -74,23 +72,20 @@ const loadScript = src => new Promise(res => {
   document.head.appendChild(s);
 });
 
-async function loadMaps() {
-  addLang(stored);
-  for (const f of MAP_FILES) addLang(await loadScript(f));
+async function getMapFiles() {
+  try {
+    const res = await fetch(REPO_CONTENTS_URL);
+    if (!res.ok) return MAP_FILES;
+    const items = await res.json();
+    const found = items.filter(x => x.type === 'file' && x.name.endsWith('.map.js')).map(x => x.name);
+    return found.length ? [...new Set([...MAP_FILES, ...found])] : MAP_FILES;
+  } catch {
+    return MAP_FILES;
+  }
 }
 
-async function importFiles(files) {
-  for (const file of files) {
-    const url = URL.createObjectURL(new Blob([await file.text()], { type: 'text/javascript' }));
-    const l = await loadScript(url);
-    URL.revokeObjectURL(url);
-    if (!l) { alert('Could not read ' + file.name); continue; }
-    Object.assign(stored, l);
-    addLang(l);
-  }
-  try { localStorage.setItem(MAPS_KEY, JSON.stringify(stored)); }
-  catch { alert('Browser storage full; maps are loaded for this session only.'); }
-  showList();
+async function loadMaps() {
+  for (const f of await getMapFiles()) addLang(await loadScript(f));
 }
 
 function showList() {
@@ -108,21 +103,9 @@ function showList() {
             <span class="text-sm text-slate-400">${pos} / ${total}</span></div>
           <div class="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden"><div class="h-full bg-emerald-500" style="width:${pct}%"></div></div>
           <div class="text-xs text-slate-400 mt-1">${pct}%</div></button>`;
-      }).join('') || '<p class="p-4 text-slate-400">No maps loaded. Add your own .map.js files below.</p>'}
-      <label class="block w-full text-center bg-slate-700 active:bg-slate-600 rounded-2xl p-3 cursor-pointer">
-        <i class="bi bi-folder-plus"></i> Load .map.js files
-        <input id="pick" type="file" accept=".js" multiple class="hidden"></label>
-      ${Object.keys(stored).length ? `<button id="clear" class="w-full text-center text-sm text-slate-400 p-2">Remove loaded files</button>` : ''}
+      }).join('') || '<p class="p-4 text-slate-400">No episodes available.</p>'}
     </main>`;
   app.querySelectorAll('button[data-name]').forEach(b => b.onclick = () => { location.hash = b.dataset.name; });
-  document.getElementById('pick').onchange = e => importFiles([...e.target.files]);
-  const clear = document.getElementById('clear');
-  if (clear) clear.onclick = () => {
-    if (!confirm('Remove all loaded files from this browser?')) return;
-    for (const k of Object.keys(stored)) delete maps[k];
-    stored = {}; localStorage.removeItem(MAPS_KEY);
-    loadMaps().then(showList);
-  };
 }
 
 function showStudy(name) {
